@@ -1,0 +1,85 @@
+#!/usr/bin/env python3
+"""
+Supabase free-tier keep-alive — tum projeleri tek yerden canli tutar.
+
+NEDEN: Free-tier proje 7 gun GERCEK DB sorgusu almazsa otomatik pause olur.
+Cache'li API-gateway cevaplari (root /rest/v1/ gibi) SAYILMAZ. Bu yuzden her
+proje icin gercek bir tablo count sorgusu atiyoruz (RLS bos dondurse bile
+sorgu Postgres'te calisir = aktivite sayilir).
+
+Hedefler KEEPALIVE_TARGETS secret'inda JSON olarak:
+  [{"name":"app","url":"https://REF.supabase.co","key":"<public anon/publishable>","table":"profiles"}, ...]
+
+Yeni proje eklemek: secret'taki JSON'a bir satir ekle (gh secret set KEEPALIVE_TARGETS).
+"""
+import json
+import os
+import subprocess
+import sys
+
+# table alani 404 verirse denenecek yedek tablolar (sema-bagimsizlik icin)
+FALLBACK_TABLES = [
+    "profiles", "referrals", "push_tokens", "generations",
+    "app_settings", "entitlements", "user_packages", "payments",
+]
+
+
+def count_query(url, key, table):
+    """Gercek bir DB count sorgusu. HTTP kodunu doner. 200/206 = basarili."""
+    r = subprocess.run(
+        [
+            "curl", "-sS", "-m", "15", "-o", "/dev/null", "-w", "%{http_code}",
+            "-H", f"apikey: {key}",
+            "-H", f"Authorization: Bearer {key}",
+            "-H", "Prefer: count=exact",
+            "-H", "Range: 0-0",
+            f"{url}/rest/v1/{table}?select=*",
+        ],
+        capture_output=True, text=True,
+    )
+    return r.stdout.strip()
+
+
+def main():
+    raw = os.environ.get("KEEPALIVE_TARGETS", "").strip()
+    if not raw:
+        print("HATA: KEEPALIVE_TARGETS secret bos/tanimsiz.")
+        sys.exit(1)
+    try:
+        targets = json.loads(raw)
+    except json.JSONDecodeError as e:
+        print(f"HATA: KEEPALIVE_TARGETS gecerli JSON degil: {e}")
+        sys.exit(1)
+
+    failures = []
+    for t in targets:
+        name = t.get("name", "?")
+        url = t["url"]
+        key = t["key"]
+        # once projeye ozel bilinen tablo, sonra yedekler
+        primary = t.get("table")
+        tables = ([primary] if primary else []) + [c for c in FALLBACK_TABLES if c != primary]
+
+        hit = None
+        last = None
+        for table in tables:
+            last = count_query(url, key, table)
+            if last in ("200", "206"):
+                hit = (table, last)
+                break
+
+        if hit:
+            print(f"OK    {name:18} {hit[0]:14} -> HTTP {hit[1]}", flush=True)
+        else:
+            print(f"FAIL  {name:18} (son HTTP {last})", flush=True)
+            failures.append(name)
+
+    print("")
+    if failures:
+        print(f"{len(failures)}/{len(targets)} proje pinglenemedi: {failures}")
+        sys.exit(1)
+    print(f"Tum {len(targets)} proje canli tutuldu (gercek DB sorgusu).")
+
+
+if __name__ == "__main__":
+    main()

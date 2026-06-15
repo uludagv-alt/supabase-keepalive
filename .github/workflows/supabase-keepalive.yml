@@ -1,0 +1,28 @@
+name: Supabase Keep-Alive
+
+# TUM Supabase free-tier projelerini tek yerden canli tutar.
+# Free-tier proje 7 gun GERCEK DB sorgusu almazsa pause olur; root /rest/v1/
+# ping'i cache doner ve SAYILMAZ, o yuzden her projeye gercek tablo count
+# sorgusu atiyoruz. Hedefler KEEPALIVE_TARGETS secret'inda (JSON).
+#
+# Yeni proje eklemek icin sadece secret'taki JSON'a satir ekle:
+#   gh secret set KEEPALIVE_TARGETS --repo uludagv-alt/suitberry < targets.json
+
+on:
+  schedule:
+    # Pazartesi + Persembe 06:00 UTC (09:00 Istanbul). Max bosluk 4 gun < 7.
+    - cron: '0 6 * * 1,4'
+  workflow_dispatch:
+
+jobs:
+  keepalive:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Ping all Supabase projects (real DB query)
+        env:
+          KEEPALIVE_TARGETS: ${{ secrets.KEEPALIVE_TARGETS }}
+        run: python3 .github/scripts/supabase-keepalive.py
