@@ -51,9 +51,12 @@ def main():
         print(f"HATA: KEEPALIVE_TARGETS gecerli JSON degil: {e}")
         sys.exit(1)
 
+    # NOT: Repo public, run loglari da public. App isimlerini SIZDIRMAMAK icin
+    # logda sadece sira numarasi (#1..#N) basiyoruz; index->isim eslesmesi
+    # KEEPALIVE_TARGETS secret'indaki sirada (gizli kalir).
     failures = []
-    for t in targets:
-        name = t.get("name", "?")
+    for i, t in enumerate(targets, 1):
+        label = f"#{i}"
         url = t["url"]
         key = t["key"]
         # once projeye ozel bilinen tablo, sonra yedekler
@@ -69,10 +72,10 @@ def main():
                 break
 
         if hit:
-            print(f"OK    {name:18} {hit[0]:14} -> HTTP {hit[1]}", flush=True)
+            print(f"OK    {label:4} {hit[0]:14} -> HTTP {hit[1]}", flush=True)
         else:
-            print(f"FAIL  {name:18} (son HTTP {last})", flush=True)
-            failures.append(name)
+            print(f"FAIL  {label:4} (son HTTP {last})", flush=True)
+            failures.append(label)
 
     print("")
     if failures:
