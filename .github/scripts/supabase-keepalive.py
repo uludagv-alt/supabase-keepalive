@@ -16,6 +16,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 
 # table alani 404 verirse denenecek yedek tablolar (sema-bagimsizlik icin)
 FALLBACK_TABLES = [
@@ -24,20 +25,31 @@ FALLBACK_TABLES = [
 ]
 
 
-def count_query(url, key, table):
-    """Gercek bir DB count sorgusu. HTTP kodunu doner. 200/206 = basarili."""
-    r = subprocess.run(
-        [
-            "curl", "-sS", "-m", "15", "-o", "/dev/null", "-w", "%{http_code}",
-            "-H", f"apikey: {key}",
-            "-H", f"Authorization: Bearer {key}",
-            "-H", "Prefer: count=exact",
-            "-H", "Range: 0-0",
-            f"{url}/rest/v1/{table}?select=*",
-        ],
-        capture_output=True, text=True,
-    )
-    return r.stdout.strip()
+def count_query(url, key, table, attempts=3):
+    """Gercek bir DB count sorgusu. HTTP kodunu doner. 200/206 = basarili.
+
+    000 (baglanti/DNS hatasi) runner'da gecici olabilir; kisa beklemeyle
+    birkac kez dener. Proje gercekten paused ise tum denemeler 000 doner.
+    """
+    code = "000"
+    for n in range(attempts):
+        if n:
+            time.sleep(3)
+        r = subprocess.run(
+            [
+                "curl", "-sS", "-m", "15", "-o", "/dev/null", "-w", "%{http_code}",
+                "-H", f"apikey: {key}",
+                "-H", f"Authorization: Bearer {key}",
+                "-H", "Prefer: count=exact",
+                "-H", "Range: 0-0",
+                f"{url}/rest/v1/{table}?select=*",
+            ],
+            capture_output=True, text=True,
+        )
+        code = r.stdout.strip()
+        if code != "000":
+            break
+    return code
 
 
 def main():
@@ -69,6 +81,10 @@ def main():
             last = count_query(url, key, table)
             if last in ("200", "206"):
                 hit = (table, last)
+                break
+            # 000 = host'a ulasilamiyor (paused/down); baska tablo denemek
+            # bosa zaman, fail-fast. 404 ise sonraki aday tabloyu dene.
+            if last == "000":
                 break
 
         if hit:
