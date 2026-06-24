@@ -10,8 +10,12 @@ name: Supabase Keep-Alive
 
 on:
   schedule:
-    # Pazartesi + Persembe 06:00 UTC (09:00 Istanbul). Max bosluk 4 gun < 7.
-    - cron: '0 6 * * 1,4'
+    # HER GUN 06:00 UTC (09:00 Istanbul). Gunluk cunku: (1) GitHub cron
+    # best-effort'tur, saatlerce gecikebilir/atlanabilir; (2) bir run fail
+    # ederse haftada-2 kez'de 7 gunluk bosluk acilabilir; (3) Supabase'in
+    # inactivity tespiti gun-bazli gecikmeli. Gunluk = surekli aktivite,
+    # tek run kacsa bile ertesi gun telafi. Public repo'da Actions bedava.
+    - cron: '0 6 * * *'
   workflow_dispatch:
 
 jobs:
@@ -20,7 +24,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Ping all Supabase projects (real DB query)
         env:
