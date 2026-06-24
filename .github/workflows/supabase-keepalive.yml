@@ -6,7 +6,7 @@ name: Supabase Keep-Alive
 # sorgusu atiyoruz. Hedefler KEEPALIVE_TARGETS secret'inda (JSON).
 #
 # Yeni proje eklemek icin sadece secret'taki JSON'a satir ekle:
-#   gh secret set KEEPALIVE_TARGETS --repo uludagv-alt/suitberry < targets.json
+#   gh secret set KEEPALIVE_TARGETS --repo uludagv-alt/supabase-keepalive < targets.json
 
 on:
   schedule:
@@ -17,6 +17,15 @@ on:
     # tek run kacsa bile ertesi gun telafi. Public repo'da Actions bedava.
     - cron: '0 6 * * *'
   workflow_dispatch:
+    inputs:
+      force_heartbeat:
+        description: 'Heartbeat commit at zorla (push iznini test etmek icin)'
+        type: boolean
+        default: false
+
+# Heartbeat adimi repo'ya commit/push edebilsin diye yazma izni.
+permissions:
+  contents: write
 
 jobs:
   keepalive:
@@ -30,3 +39,25 @@ jobs:
         env:
           KEEPALIVE_TARGETS: ${{ secrets.KEEPALIVE_TARGETS }}
         run: python3 .github/scripts/supabase-keepalive.py
+
+      # GitHub PUBLIC repo'da scheduled workflow 60 gun repo COMMIT'i almazsa
+      # otomatik disable olur (cron run'lari commit sayilmaz). Son commit 30
+      # gunu gectiyse otomatik bos heartbeat commit'i atip 60-gun saatini
+      # sifirlariz. if: always() -> bir proje pause/fail olsa bile (ping step
+      # exit 1) heartbeat yine de calissin, repo canli kalsin.
+      - name: Repo heartbeat (60-gun scheduled-disable onleme)
+        if: always()
+        run: |
+          set -e
+          last=$(git log -1 --format=%ct)
+          age_days=$(( ( $(date +%s) - last ) / 86400 ))
+          echo "Son commit ${age_days} gun once."
+          if [ "${{ github.event.inputs.force_heartbeat }}" = "true" ] || [ "$age_days" -ge 30 ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git commit --allow-empty -m "chore: keepalive heartbeat (60-gun scheduled-disable onleme)"
+            git push
+            echo "Heartbeat commit atildi + push edildi (60-gun saati sifirlandi)."
+          else
+            echo "30 gunden yeni, heartbeat commit gerekmez."
+          fi
