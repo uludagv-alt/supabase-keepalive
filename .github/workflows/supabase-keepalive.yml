@@ -30,7 +30,9 @@ permissions:
 jobs:
   keepalive:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # Cok-gecisli retry (gecici blip'leri elemek icin) gecisler arasi bekleme
+    # ekler; saglikli durumda ~20-30s, en kotude birkac dakika. 15dk bol pay.
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@v5
