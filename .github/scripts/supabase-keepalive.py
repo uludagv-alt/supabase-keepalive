@@ -109,6 +109,19 @@ def main():
         print("HATA: KEEPALIVE_TARGETS bos liste / liste degil.")
         sys.exit(1)
 
+    # KEEPALIVE_SKIP: gecici olarak atlanacak projeler (virgulle ayrilmis
+    # ref/url parcasi). Kullanim: bir proje GERCEKTEN kalici sorunluysa
+    # (or. egress-restricted 402) ve farkindaysak, gunluk yanlis-olmayan ama
+    # tekrarlayan mail'i susturmak icin secret'a refini ekle. App ismi
+    # sizdirmamak icin ref secret'ta tutulur (logda yalniz #N gorunur).
+    # Duzeldikten sonra secret'tan cikar -> tekrar izlenir.
+    skip_raw = os.environ.get("KEEPALIVE_SKIP", "").strip()
+    skips = [s.strip() for s in skip_raw.split(",") if s.strip()]
+
+    def is_skipped(t):
+        url = str(t.get("url", ""))
+        return any(s in url for s in skips)
+
     # NOT: Repo public, run loglari da public. App isimlerini SIZDIRMAMAK icin
     # logda sadece sira numarasi (#1..#N) basiyoruz; index->isim eslesmesi
     # KEEPALIVE_TARGETS secret'indaki sirada (gizli kalir).
@@ -116,8 +129,15 @@ def main():
     # Cok-gecisli deneme: ilk geciste basarisiz olan AMA kodu gecici (transient)
     # olan hedefler bir sonraki geciste tekrar denenir. Kalici hata (401/403/
     # 404-tukenmis) ya da basari -> hedef "kesinlesir", bir daha denenmez.
-    results = {}                              # idx -> (ok, table, code)
-    pending = list(enumerate(targets, 1))     # [(idx, target), ...]
+    results = {}                              # idx -> (ok, table, code) | ("SKIP",)
+    pending = []                              # [(idx, target), ...] (atlanmayanlar)
+    skipped = 0
+    for idx, t in enumerate(targets, 1):
+        if is_skipped(t):
+            results[idx] = ("SKIP", None, "-")
+            skipped += 1
+        else:
+            pending.append((idx, t))
 
     for p in range(PASSES):
         if p:
@@ -139,20 +159,24 @@ def main():
     for idx in range(1, len(targets) + 1):
         ok, table, code = results[idx]
         label = f"#{idx}"
-        if ok:
+        if ok == "SKIP":
+            print(f"SKIP  {label:4} (manuel atlandi: KEEPALIVE_SKIP)", flush=True)
+        elif ok:
             print(f"OK    {label:4} {table:14} -> HTTP {code}", flush=True)
         else:
             print(f"FAIL  {label:4} (son HTTP {code})", flush=True)
             failures.append(label)
 
     print("")
+    active = len(targets) - skipped
     if failures:
         # Buraya geldiyse: hedef TUM gecislerde basarisiz oldu = gecici degil,
         # GERCEK problem (paused/restricted/yanlis key). Mail HAK EDILMIS.
-        print(f"{len(failures)}/{len(targets)} proje {PASSES} gecisten sonra hala "
+        print(f"{len(failures)}/{active} aktif proje {PASSES} gecisten sonra hala "
               f"pinglenemedi: {failures}")
         sys.exit(1)
-    print(f"Tum {len(targets)} proje canli tutuldu (gercek DB sorgusu).")
+    extra = f" ({skipped} proje atlandi)" if skipped else ""
+    print(f"Tum {active} aktif proje canli tutuldu (gercek DB sorgusu).{extra}")
 
 
 if __name__ == "__main__":

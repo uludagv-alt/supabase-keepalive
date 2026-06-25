@@ -40,6 +40,9 @@ jobs:
       - name: Ping all Supabase projects (real DB query)
         env:
           KEEPALIVE_TARGETS: ${{ secrets.KEEPALIVE_TARGETS }}
+          # Gecici olarak izlemeyi atlanacak projeler (virgulle ayrilmis
+          # ref'ler). App ismi sizdirmamak icin secret'ta tutulur. Bos olabilir.
+          KEEPALIVE_SKIP: ${{ secrets.KEEPALIVE_SKIP }}
         run: python3 .github/scripts/supabase-keepalive.py
 
       # GitHub PUBLIC repo'da scheduled workflow 60 gun repo COMMIT'i almazsa
