@@ -1,2 +1,5 @@
 __pycache__/
 *.pyc
+
+# keepalive hedefleri (anon key'ler public ama app isimleri public repo'da olmasin)
+targets.json
