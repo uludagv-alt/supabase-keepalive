@@ -3,3 +3,6 @@ __pycache__/
 
 # keepalive hedefleri (anon key'ler public ama app isimleri public repo'da olmasin)
 targets.json
+
+# Elle alinan yedekler depoya girmez.
+*.bak
